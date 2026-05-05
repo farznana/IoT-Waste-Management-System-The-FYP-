@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recycling Dashboard</title>
+<link rel="stylesheet" href="recycling-style.css">
+<link href='https://cdn.boxicons.com/3.0.6/fonts/basic/boxicons.min.css'
+rel='stylesheet'>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+169
+<body class="recycling-page">
+<!-- Sidebar -->
+<div class="sidebar">
+<a href="#" class="logo">
+<i class='bx bx-trash-alt'></i>
+<div class="logo-name"><span>Smart</span>Bin</div>
+</a>
+<ul class="side-menu">
+<li><a href="dashboard.html"><i class='bx bx dashboard'></i>Dashboard</a></li>
+<li><a href="history.html"><i class='bx bx-history'></i>History</a></li>
+<li><a href="recycling.html"><i class='bx bx-recycle'></i>Recycling</a></li>
+<li><a href="settings.html"><i class='bx bx-cog'></i>Settings</a></li>
+<li><a href="about.html"><i class='bx bx-form'></i>About</a></li>
+</ul>
+<ul class="side-menu">
+<li>
+<a href="#" id="logoutBtn"><i class='bx bx-arrow-out-right-square half'></i>Logout</a>
+</li>
+</ul>
+</div>
+<!-- End of Sidebar -->
+<!-- Total recycled display -->
+<section class="total-recycled">
+<h2>Total Recycled</h2>
+170
+<p id="totalRecycled">0 kg</p>
+</section>
+<!-- Recycling items -->
+<section class="recycling-display">
+<div class="recycle-item">
+<h3>Plastic</h3>
+<p id="recPlastic">0 kg</p>
+<div class="progress-bar"><div class="progress-fill" id="fillPlastic"></div></div>
+<input type="number" id="recInputPlastic" placeholder="Update kg">
+</div>
+<div class="recycle-item">
+<h3>Paper</h3>
+<p id="recPaper">0 kg</p>
+<div class="progress-bar"><div class="progress-fill" id="fillPaper"></div></div>
+<input type="number" id="recInputPaper" placeholder="Update kg">
+</div>
+<div class="recycle-item">
+<h3>Metal</h3>
+<p id="recMetal">0 kg</p>
+<div class="progress-bar"><div class="progress-fill" id="fillMetal"></div></div>
+<input type="number" id="recInputMetal" placeholder="Update kg">
+</div>
+<div class="recycle-item">
+<h3>Glass</h3>
+<p id="recGlass">0 kg</p>
+171
+<div class="progress-bar"><div class="progress-fill" id="fillGlass"></div></div>
+<input type="number" id="recInputGlass" placeholder="Update kg">
+</div>
+</section>
+<button id="saveRecycling" class="btn">Save Updates</button>
+<!-- Pie chart -->
+<section class="chart-section">
+<div class="chart-card">
+<canvas id="recycleChart"></canvas>
+</div>
+</section>
+<script src="script.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+initRecycling(); // initialize recycling logic
+// Setup pie chart
+const ctx = document.getElementById('recycleChart').getContext('2d');
+const recData = loadRecycling();
+const recycleChart = new Chart(ctx, {
+type: 'pie',
+data: {
+labels: ['Plastic','Paper','Metal','Glass'],
+datasets: [{
+data: [recData.plastic, recData.paper, recData.metal, recData.glass],
+172
+backgroundColor: ['#2fb86b','#f2c94c','#ff5c5c','#56CCF2']
+}]
+},
+options: { plugins: { legend: { position: 'bottom' } } }
+});
+// Update progress bars and total recycled
+function updateVisuals() {
+const rec = loadRecycling();
+document.getElementById('totalRecycled').textContent =
+rec.plastic + rec.paper + rec.metal + rec.glass + ' kg';
+const maxTarget = Math.max(rec.plastic, rec.paper, rec.metal, rec.glass, 100);
+document.getElementById('fillPlastic').style.width = Math.min(rec.plastic /
+maxTarget * 100,100) + '%';
+document.getElementById('fillPaper').style.width = Math.min(rec.paper /
+maxTarget * 100,100) + '%';
+document.getElementById('fillMetal').style.width = Math.min(rec.metal /
+maxTarget * 100,100) + '%';
+document.getElementById('fillGlass').style.width = Math.min(rec.glass /
+maxTarget * 100,100) + '%';
+}
+updateVisuals();
+// Update visuals whenever Save is clicked
+const saveBtn = document.getElementById('saveRecycling');
+if(saveBtn) saveBtn.addEventListener('click', ()=>{
+updateVisuals();
+// also update chart
+173
+const rec = loadRecycling();
+recycleChart.data.datasets[0].data = [rec.plastic, rec.paper, rec.metal, rec.glass];
+recycleChart.update();
+});
+});
+</script>
+</body>
+</html>

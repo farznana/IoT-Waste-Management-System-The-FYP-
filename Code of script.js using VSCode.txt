@@ -1,0 +1,299 @@
+/* ========== CONFIG ========== */
+const BLYNK_AUTH_TOKEN = "XEU_q37RBG665ZPHRu3gdaQt-XJk0X9u";
+const FETCH_INTERVAL_MS = 2000;
+224
+const HISTORY_KEY = "smartbin_history_v1";
+const RECYCLING_KEY = "recycling_data_v1";
+/* ========== DOM HELPERS ========== */
+const $ = (id) => document.getElementById(id);
+/* ========== AUTHENTICATION ========== */
+function loginUser() {
+localStorage.setItem("loggedIn", "true");
+}
+function logoutUser() {
+localStorage.removeItem("loggedIn");
+window.location.href = "index.html";
+}
+function checkLogin() {
+if (!localStorage.getItem("loggedIn")) {
+window.location.href = "index.html"; // redirect if not logged in
+}
+}
+/* ========== SIMPLE LOGIN HANDLER ========== */
+document.addEventListener("DOMContentLoaded", () => {
+const loginBtn = $("loginBtn");
+if (loginBtn) {
+loginBtn.addEventListener("click", () => {
+const username = $("username").value.trim();
+const password = $("password").value.trim();
+225
+if (username === "admin" && password === "admin123") {
+loginUser();
+window.location.href = "dashboard.html";
+} else {
+alert("Invalid username or password!");
+}
+});
+}
+// Attach logout buttons globally
+document.querySelectorAll("#logoutBtn, .logout-link").forEach(b => b && (b.onclick =
+logoutUser));
+});
+/* ========== STORAGE ========== */
+function loadHistory() { try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) ||
+[]; } catch(e){ return []; } }
+function saveHistory(h) { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+function loadRecycling() {
+try { return JSON.parse(localStorage.getItem(RECYCLING_KEY)) ||
+{plastic:0,paper:0,metal:0,glass:0}; }
+catch(e) { return {plastic:0,paper:0,metal:0,glass:0}; }
+}
+function saveRecycling(data) { localStorage.setItem(RECYCLING_KEY,
+JSON.stringify(data)); }
+/* ========== BLYNK FETCH ========== */
+async function fetchBinLevelOnce() {
+226
+if (!BLYNK_AUTH_TOKEN || BLYNK_AUTH_TOKEN.includes("YOUR_REAL"))
+return null;
+try {
+const r = await
+fetch(`https://blynk.cloud/external/api/get?token=${BLYNK_AUTH_TOKEN}&v1=1`);
+const txt = await r.text();
+const num = parseInt(txt);
+if (Number.isFinite(num)) return num;
+return null;
+} catch(e) {
+console.error("Blynk fetch error", e);
+return null;
+}
+}
+function pushHistory(level){
+if(level === null) return;
+const h = loadHistory();
+h.push({ ts: Date.now(), level });
+if(h.length > 1200) h.splice(0, h.length - 1200);
+saveHistory(h);
+}
+/* ========== DASHBOARD PAGES INIT FUNCTIONS ========== */
+function initDashboard() {
+checkLogin(); // enforce login
+const led = $('ledIndicator');
+const lvlText = $('binLevel');
+227
+const prog = $('binProgress');
+const last = $('lastUpdated');
+const miniCtx = $('miniChart') ? $('miniChart').getContext('2d') : null;
+const labels = []; const data = [];
+let miniChart = null;
+if(miniCtx){
+miniChart = new Chart(miniCtx, {
+type:'line',
+data:{ labels, datasets:[{ label:'Level', data, borderColor:'#2fb86b', fill:false,
+tension:0.3 }] },
+options:{ scales:{ y:{ min:0, max:100 } }, plugins:{ legend:{ display:false } } }
+});
+}
+const rec = loadRecycling();
+if($('recPlastic')) $('recPlastic').textContent = rec.plastic + ' kg';
+if($('recPaper')) $('recPaper').textContent = rec.paper + ' kg';
+if($('recMetal')) $('recMetal').textContent = rec.metal + ' kg';
+if($('recGlass')) $('recGlass').textContent = rec.glass + ' kg';
+async function update() {
+const level = await fetchBinLevelOnce();
+if(level === null) return;
+if(led) led.className = 'led ' + (level<40 ? 'green' : level<80 ? 'yellow' : 'red');
+if(lvlText) lvlText.textContent = `Level: ${level}%`;
+if(prog){ prog.style.width = `${level}%`; prog.style.background = level<40?
+'#2fb86b': level<80? '#f2c94c' : '#ff5c5c'; }
+228
+if(last) last.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+if(miniChart){
+labels.push(new Date().toLocaleTimeString());
+data.push(level);
+if(labels.length > 6){ labels.shift(); data.shift(); }
+miniChart.update();
+}
+pushHistory(level);
+}
+update();
+setInterval(update, FETCH_INTERVAL_MS);
+if($('refreshBtn')) $('refreshBtn').onclick = update;
+// ===== Dashboard Recycling Chart =====
+const dashCtx = $('dashboardRecycleChart') ?
+$('dashboardRecycleChart').getContext('2d') : null;
+let dashboardChart = null;
+function renderDashboardRecycleChart() {
+if(!dashCtx) return;
+const data = loadRecycling();
+const chartData = [data.plastic, data.paper, data.metal, data.glass];
+if(dashboardChart){
+dashboardChart.data.datasets[0].data = chartData;
+229
+dashboardChart.update();
+} else {
+dashboardChart = new Chart(dashCtx, {
+type: 'pie',
+data: {
+labels: ['Plastic', 'Paper', 'Metal', 'Glass'],
+datasets: [{
+label: 'Recycling (kg)',
+data: chartData,
+backgroundColor: ['#2fb86b','#f2c94c','#ff5c5c','#4fc58b']
+}]
+},
+options: {
+plugins: {
+legend: {
+position: 'bottom'
+}
+}
+}
+});
+}
+}
+// render immediately
+renderDashboardRecycleChart();
+}
+/* ========== BIN STATUS PAGE ========== */
+230
+function initBinStatus() {
+checkLogin();
+const gauge = $('gaugeValue'), led = $('statusLed'), last = $('statusLast'), avgBox =
+$('avgToday'), maxBox = $('maxToday');
+async function update() {
+const level = await fetchBinLevelOnce();
+if(level===null) return;
+if(gauge) gauge.textContent = `${level}%`;
+if(led) led.className = 'led ' + (level<40?'green':level<80?'yellow':'red');
+if(last) last.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+const hist = loadHistory();
+const p24 = Date.now() - 24*60*60*1000;
+const today = hist.filter(r=>r.ts>p24).map(r=>r.level);
+if(today.length){
+const avg = Math.round(today.reduce((a,b)=>a+b,0)/today.length);
+const mx = Math.max(...today);
+if(avgBox) avgBox.textContent = `${avg}%`;
+if(maxBox) maxBox.textContent = `${mx}%`;
+}
+pushHistory(level);
+}
+update();
+setInterval(update, FETCH_INTERVAL_MS);
+}
+/* ========== FILL LEVEL PAGE ========== */
+231
+function initFillLevel() {
+checkLogin();
+const ctx = $('fullChart') ? $('fullChart').getContext('2d') : null;
+function render(filter='all') {
+const hist = loadHistory();
+let filtered = hist;
+if(filter==='24h') filtered = hist.filter(r=>r.ts>Date.now()-24*60*60*1000);
+else if(filter==='7d') filtered = hist.filter(r=>r.ts>Date.now()-7*24*60*60*1000);
+else if(filter==='today') filtered = hist.filter(r=>new Date(r.ts).toDateString()===new
+Date().toDateString());
+const labels = filtered.map(r=>new Date(r.ts).toLocaleString());
+const data = filtered.map(r=>r.level);
+if(ctx){
+if(window.fullChart){
+window.fullChart.data.labels = labels;
+window.fullChart.data.datasets[0].data = data;
+window.fullChart.update();
+} else {
+window.fullChart = new Chart(ctx, {
+type: 'line',
+data: { labels, datasets: [{ label: 'Fill Level (%)', data, borderColor: '#2fb86b',
+backgroundColor: 'rgba(47,184,107,0.08)', fill:true, tension:0.3 }]},
+options: { scales: { y: { min:0, max:100 } } }
+});
+}
+}
+232
+const all = loadHistory().map(r=>r.level);
+if(all.length){
+const mx = Math.max(...all), mn = Math.min(...all), avg =
+Math.round(all.reduce((a,b)=>a+b,0)/all.length);
+$('sumMax') && ($('sumMax').textContent = mx+'%');
+$('sumMin') && ($('sumMin').textContent = mn+'%');
+$('sumAvg') && ($('sumAvg').textContent = avg+'%');
+}
+}
+render('today');
+const sel = $('filterSelect');
+if(sel) sel.addEventListener('change', e => render(e.target.value));
+}
+/* ========== HISTORY PAGE ========== */
+function initHistory() {
+checkLogin();
+const tbody = $('historyTbody');
+function render(){
+const h = loadHistory().slice().reverse();
+tbody.innerHTML = '';
+h.forEach(r=>{
+const tr = document.createElement('tr');
+const date = new Date(r.ts).toLocaleString();
+const color = r.level<40?'#2fb86b':r.level<80?'#f2c94c':'#ff5c5c';
+tr.innerHTML = `<td>${date}</td><td>${r.level}%</td><td><span
+style="display:inline-block;width:12px;height:12px;border radius:3px;background:${color}"></span></td>`;
+233
+tbody.appendChild(tr);
+});
+}
+render();
+const rf = $('refreshHistory'); if(rf) rf.addEventListener('click', render);
+}
+/* ========== SETTINGS PAGE ========== */
+function initSettings() {
+checkLogin();
+const binName = $('binName'), tokenInput = $('tokenInput'), saveBtn =
+$('saveSettings');
+tokenInput.value = localStorage.getItem('sb_token_masked') || '';
+binName.value = localStorage.getItem('sb_bin_name') || 'Smart Bin A';
+if(saveBtn) saveBtn.onclick = ()=>{
+localStorage.setItem('sb_token_masked', tokenInput.value);
+localStorage.setItem('sb_bin_name', binName.value);
+alert('Settings saved (frontend only).');
+};
+const resetRec = $('resetRecycling');
+if(resetRec) resetRec.onclick = ()=>{
+saveRecycling({plastic:0,paper:0,metal:0,glass:0});
+alert('Recycling data reset'); location.reload();
+};
+}
+/* ========== RECYCLING PAGE ========== */
+function initRecycling() {
+234
+checkLogin();
+const data = loadRecycling();
+const inputs = { plastic:$('recInputPlastic'), paper:$('recInputPaper'),
+metal:$('recInputMetal'), glass:$('recInputGlass') };
+const displays = { plastic:$('recPlastic'), paper:$('recPaper'), metal:$('recMetal'),
+glass:$('recGlass') };
+function updateDisplay(){
+const d = loadRecycling();
+for(const k in displays) if(displays[k]) displays[k].textContent = d[k]+' kg';
+}
+updateDisplay();
+const saveBtn = $('saveRecycling');
+if(saveBtn) saveBtn.onclick = ()=>{
+for(const k in inputs){ if(inputs[k]) data[k] = parseFloat(inputs[k].value)||0; }
+saveRecycling(data); updateDisplay(); alert('Recycling data updated');
+};
+}
+/* ========== ABOUT PAGE ========== */
+function initAbout(){
+checkLogin();
+}
+/* ========== AUTO INIT BY BODY CLASS ========== */
+document.addEventListener("DOMContentLoaded", ()=>{
+const bodyClass = document.body.className;
+if(bodyClass.includes("login-page")) return; // login handled already
+235
+else if(bodyClass.includes("dashboard-page")) initDashboard();
+else if(bodyClass.includes("bin-status-page")) initBinStatus();
+else if(bodyClass.includes("fill-level-page")) initFillLevel();
+else if(bodyClass.includes("history-page")) initHistory();
+else if(bodyClass.includes("settings-page")) initSettings();
+else if(bodyClass.includes("recycling-page")) initRecycling();
+else if(bodyClass.includes("about-page")) initAbout();
+});
